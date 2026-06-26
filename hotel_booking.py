@@ -20,7 +20,7 @@ model, selector = load_artifacts()
 df = load_data()
 
 st.sidebar.title("🏨 Hotel Booking")
-page = st.sidebar.radio("Navigate", ["🏠 Home", "📊 Data Insights", "💡 Analysis Advice", "🔮 Prediction", "📈 Model Performance"])
+page = st.sidebar.radio("Navigate", ["🏠 Home", "📊 Data Insights", "💡 Business Insights & Recommendations", "🔮 Prediction", "📈 Model Performance"])
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE 1 — Home
@@ -164,6 +164,13 @@ elif page == "📊 Data Insights":
     fig8.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
     fig8.update_layout(yaxis_range=[0, prev['Cancellation Rate (%)'].max()+10])
     st.plotly_chart(fig8, use_container_width=True)
+    st.markdown("""
+    > **Distribution of previous_cancellations:**
+    > - 0 previous cancellations: **98.09%** of customers
+    > - 1 previous cancellation: **1.59%**
+    > - 2 previous cancellations: **0.13%**
+    > - 3 previous cancellations: **0.07%**
+    """)
 
     st.markdown("---")
 
@@ -197,43 +204,63 @@ elif page == "📊 Data Insights":
     fig10.update_layout(yaxis={'categoryorder': 'total ascending'})
     st.plotly_chart(fig10, use_container_width=True)
 
+    st.markdown("---")
+
+    # 11 — Top 10 Agents by Cancellation Rate
+    st.subheader("11 — Top 10 Agents by Cancellation Rate")
+    agent_cancel = df.groupby('agent').agg(
+        total=('is_canceled', 'count'),
+        canceled=('is_canceled', 'sum')
+    ).reset_index()
+    agent_cancel = agent_cancel[agent_cancel['total'] >= 50]
+    agent_cancel['rate'] = (agent_cancel['canceled'] / agent_cancel['total'] * 100).round(2)
+    agent_cancel = agent_cancel.nlargest(10, 'rate')
+    agent_cancel['agent'] = agent_cancel['agent'].astype(str)
+    fig11 = px.bar(agent_cancel, x='rate', y='agent', orientation='h',
+                   text='rate', color='rate', color_continuous_scale='Reds',
+                   labels={'rate': 'Cancellation Rate (%)', 'agent': 'Agent ID'})
+    fig11.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+    fig11.update_layout(yaxis={'categoryorder': 'total ascending'})
+    st.plotly_chart(fig11, use_container_width=True)
+    st.info("💡 Insight: Some agents are associated with significantly higher cancellation rates, which may reflect booking patterns or customer segments they serve.")
+
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE 3 — Analysis Advice
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "💡 Analysis Advice":
-    st.title("💡 Analysis Advice")
+elif page == "💡 Business Insights & Recommendations":
+    st.title("💡 Business Insights & Recommendations")
     st.markdown("Based on the data analysis, here are key insights and recommendations:")
     st.markdown("---")
 
     st.subheader("1 — Lead Time")
-    st.info("📌 Customers with higher lead times are more likely to cancel their reservations. Hotels should consider sending reminders or offering incentives for bookings made far in advance.")
+    st.info("📌 Customers with longer lead times are more likely to cancel. Hotels can reduce cancellations by sending reminders or engaging customers before arrival.")
 
     st.subheader("2 — Deposit Type")
-    st.info("📌 Bookings with Non Refund deposits are rarely canceled. Encouraging non-refundable deposits can significantly reduce cancellation rates.")
+    st.info("📌 Deposit type has a strong relationship with cancellations. In this dataset, Non Refund bookings show the highest cancellation rate, making this feature highly informative for prediction.")
 
     st.subheader("3 — Market Segment")
-    st.info("📌 Online TA and Groups segments have the highest cancellation rates. Hotels should apply stricter policies or require deposits for these segments.")
+    st.info("📌 Online TA and Groups have the highest cancellation rates. Hotels may apply stricter booking policies or additional confirmation for these segments.")
 
     st.subheader("4 — Special Requests")
-    st.info("📌 Customers who make more special requests tend to keep their reservations. Personalized services can increase commitment to bookings.")
+    st.info("📌 Customers with more special requests are less likely to cancel, suggesting that engaged customers are more committed to their bookings.")
 
     st.subheader("5 — Repeated Guests")
-    st.info("📌 Repeated guests have a much lower cancellation rate. Loyalty programs and rewards for returning customers can help reduce overall cancellations.")
+    st.info("📌 Returning guests rarely cancel compared to new customers. Loyalty programs can help reduce cancellations.")
 
     st.subheader("6 — Previous Cancellations")
-    st.info("📌 Customers with a history of cancellations are significantly more likely to cancel again. Hotels should flag these customers and require deposits or stricter policies.")
+    st.info("📌 A history of previous cancellations is a strong indicator of future cancellation risk.")
 
     st.subheader("7 — Room Changed")
-    st.info("📌 When the assigned room differs from the reserved room, cancellation patterns change. Ensuring room assignments match reservations can improve customer satisfaction.")
+    st.info("📌 Room changes are associated with much lower cancellation rates. However, this feature becomes available after booking and should be interpreted carefully in real-world prediction systems.")
 
     st.subheader("8 — ADR")
-    st.info("📌 Canceled bookings tend to have slightly higher ADR values. Offering flexible pricing or discounts for high-ADR bookings may help retain customers.")
+    st.info("📌 Higher ADR bookings show a slightly higher cancellation tendency, but ADR alone is not a strong predictor.")
 
     st.subheader("9 — Country")
-    st.info("📌 Some countries have significantly higher cancellation rates. Targeted communication and tailored policies for high-risk countries can be beneficial.")
+    st.info("📌 Cancellation rates vary by country. Hotels can use targeted communication for customers from higher-risk regions.")
 
     st.subheader("10 — General Recommendation")
-    st.success("✅ Focus on: Non-refundable deposits, loyalty programs, and personalized communication for high-risk segments to reduce cancellations and improve revenue.")
+    st.success("✅ Focus on early identification of high-risk bookings using Lead Time, Previous Cancellations, Market Segment, Deposit Type, and Guest History to reduce cancellations and improve hotel revenue.")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE 4 — Prediction
@@ -282,9 +309,7 @@ elif page == "🔮 Prediction":
     st.markdown("---")
 
     if st.button("🔮 Predict", use_container_width=True):
-        template = df.iloc[[0]].copy()
-        if 'is_canceled' in template.columns:
-            template = template.drop(columns='is_canceled')
+        template = df.drop(columns='is_canceled').iloc[[0]].copy()
         template['hotel']                          = hotel
         template['lead_time']                      = lead_time
         template['arrival_date_year']              = arrival_date_year

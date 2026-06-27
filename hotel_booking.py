@@ -19,26 +19,98 @@ def load_data():
 model, selector = load_artifacts()
 df = load_data()
 
+# ── Global CSS ────────────────────────────────────────────────────────────────
+st.markdown("""
+<style>
+@keyframes fadeIn {
+    from {opacity: 0; transform: translateY(10px);}
+    to   {opacity: 1; transform: translateY(0);}
+}
+.result-box { animation: fadeIn 1s ease-in-out; }
+
+h1, h2, h3 { color: #00c3ff; }
+
+div.stButton > button {
+    background-color: #00c3ff;
+    color: white;
+    border-radius: 10px;
+    height: 3em;
+    width: 100%;
+    font-size: 18px;
+    border: none;
+    box-shadow: 0 0 10px #00c3ff;
+}
+div.stButton > button:hover {
+    background-color: #009ec3;
+    color: white;
+    box-shadow: 0 0 20px #00c3ff;
+}
+
+[data-testid="stMetric"] {
+    background-color: #020617;
+    padding: 15px;
+    border-radius: 10px;
+    border: 1px solid #1e293b;
+}
+[data-testid="stMetricValue"] {
+    font-size: 1.4rem;
+    color: #00c3ff;
+}
+
+div[data-testid="stDataFrame"] {
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+section[data-testid="stSidebar"] {
+    background-color: #020617;
+}
+
+.info-card {
+    padding: 20px;
+    border-radius: 12px;
+    background-color: #111827;
+    border: 1px solid #1f2937;
+    margin-bottom: 15px;
+    transition: transform 0.3s;
+}
+.info-card:hover { transform: scale(1.01); }
+</style>
+""", unsafe_allow_html=True)
+
+import plotly.io as pio
+pio.templates.default = "plotly_dark"
+
 st.sidebar.title("🏨 Hotel Booking")
-page = st.sidebar.radio("Navigate", ["🏠 Home", "📊 Data Insights", "💡 Business Insights & Recommendations", "🔮 Prediction", "📈 Model Performance"])
+page = st.sidebar.radio("Navigate", ["🏠 Home", "📊 Data Insights", "🔮 Prediction", "📈 Model Performance"])
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE 1 — Home
 # ══════════════════════════════════════════════════════════════════════════════
 if page == "🏠 Home":
-    st.title("🏨 Hotel Booking Cancellation Prediction")
-    st.markdown("---")
+    st.markdown("""
+    <div style="padding:30px; border-radius:15px;
+                background:linear-gradient(90deg,#0ea5e9,#1e293b); margin-bottom:20px;">
+        <h2 style="color:white;">🏨 Smart Booking Risk Detection</h2>
+        <p style="color:white; font-size:16px;">
+            Predict cancellations and reduce revenue loss using AI & Machine Learning
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
     col1, col2 = st.columns(2)
     with col1:
-        st.subheader("📋 Project Overview")
         st.markdown("""
-        This project predicts whether a hotel booking will be **canceled or not**
-        using machine learning on real-world hotel booking data.
-
-        The goal is to help hotels identify high-risk bookings early,
-        so they can take action to reduce cancellations and revenue loss.
-        """)
+        <div class="info-card">
+            <h4 style="color:#00c3ff;">📋 Project Overview</h4>
+            <p style="color:#d1d5db;">
+            This project predicts whether a hotel booking will be <b>canceled or not</b>
+            using machine learning on real-world hotel booking data.<br><br>
+            The goal is to help hotels identify high-risk bookings early,
+            so they can take action to reduce cancellations and revenue loss.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
 
     with col2:
         st.subheader("📊 Dataset Info")
@@ -58,16 +130,31 @@ if page == "🏠 Home":
                  color_discrete_sequence=['#2563EB', '#EF4444'])
     st.plotly_chart(fig, use_container_width=True)
 
+    st.markdown("---")
+    st.subheader("📈 Cancellation Trend by Month")
+    monthly = df.groupby('arrival_date_month')['is_canceled'].mean().reset_index()
+    monthly.columns = ['Month', 'Cancellation Rate']
+    monthly['Cancellation Rate'] = (monthly['Cancellation Rate'] * 100).round(2)
+    fig_trend = px.line(monthly, x='Month', y='Cancellation Rate',
+                        markers=True, labels={'Cancellation Rate': 'Cancellation Rate (%)'},
+                        color_discrete_sequence=['#00c3ff'])
+    st.plotly_chart(fig_trend, use_container_width=True)
+
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE 2 — Data Insights
 # ══════════════════════════════════════════════════════════════════════════════
 elif page == "📊 Data Insights":
     st.title("📊 Data Insights")
+
+    # Interactive filter
+    segment = st.selectbox("🔍 Filter by Market Segment", ["All"] + list(df['market_segment'].unique()))
+    filtered_df = df if segment == "All" else df[df['market_segment'] == segment]
+    st.caption(f"Showing {len(filtered_df):,} bookings")
     st.markdown("---")
 
     # 1 — Cancellation Rate
     st.subheader("1 — Overall Cancellation Rate")
-    cancel_rate = df['is_canceled'].value_counts(normalize=True).reset_index()
+    cancel_rate = filtered_df['is_canceled'].value_counts(normalize=True).reset_index()
     cancel_rate.columns = ['Status', 'Rate']
     cancel_rate['Status'] = cancel_rate['Status'].map({0: 'Not Canceled', 1: 'Canceled'})
     cancel_rate['Rate'] = (cancel_rate['Rate'] * 100).round(2)
@@ -76,22 +163,24 @@ elif page == "📊 Data Insights":
     fig1.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
     fig1.update_layout(showlegend=False, yaxis_range=[0, 100])
     st.plotly_chart(fig1, use_container_width=True)
+    st.info("💡 About 37% of bookings are canceled, indicating a significant class imbalance.")
 
     st.markdown("---")
 
     # 2 — Lead Time vs Cancellation
     st.subheader("2 — Lead Time vs Cancellation")
-    fig2 = px.box(df, x='is_canceled', y='lead_time', color='is_canceled',
+    fig2 = px.box(filtered_df, x='is_canceled', y='lead_time', color='is_canceled',
                   labels={'is_canceled': 'Canceled', 'lead_time': 'Lead Time (days)'},
                   color_discrete_map={0: '#2563EB', 1: '#EF4444'})
     fig2.update_layout(showlegend=False)
     st.plotly_chart(fig2, use_container_width=True)
+    st.info("💡 Customers with longer lead times are more likely to cancel. Hotels can reduce cancellations by sending reminders or engaging customers before arrival.")
 
     st.markdown("---")
 
     # 3 — Deposit Type vs Cancellation
     st.subheader("3 — Deposit Type vs Cancellation Rate")
-    deposit = df.groupby('deposit_type')['is_canceled'].mean().reset_index()
+    deposit = filtered_df.groupby('deposit_type')['is_canceled'].mean().reset_index()
     deposit['is_canceled'] = (deposit['is_canceled'] * 100).round(2)
     deposit.columns = ['Deposit Type', 'Cancellation Rate (%)']
     fig3 = px.bar(deposit, x='Deposit Type', y='Cancellation Rate (%)', color='Deposit Type',
@@ -99,12 +188,13 @@ elif page == "📊 Data Insights":
     fig3.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
     fig3.update_layout(showlegend=False, yaxis_range=[0, deposit['Cancellation Rate (%)'].max()+10])
     st.plotly_chart(fig3, use_container_width=True)
+    st.info("💡 Deposit type has a strong relationship with cancellations. In this dataset, Non Refund bookings show the highest cancellation rate, making this feature highly informative for prediction.")
 
     st.markdown("---")
 
     # 4 — Market Segment vs Cancellation
     st.subheader("4 — Market Segment vs Cancellation Rate")
-    seg = df.groupby('market_segment')['is_canceled'].mean().reset_index()
+    seg = filtered_df.groupby('market_segment')['is_canceled'].mean().reset_index()
     seg['is_canceled'] = (seg['is_canceled'] * 100).round(2)
     seg.columns = ['Market Segment', 'Cancellation Rate (%)']
     seg = seg.sort_values('Cancellation Rate (%)', ascending=False)
@@ -113,22 +203,24 @@ elif page == "📊 Data Insights":
     fig4.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
     fig4.update_layout(showlegend=False, yaxis_range=[0, seg['Cancellation Rate (%)'].max()+10])
     st.plotly_chart(fig4, use_container_width=True)
+    st.info("💡 Online TA and Groups have the highest cancellation rates. Hotels may apply stricter booking policies or additional confirmation for these segments.")
 
     st.markdown("---")
 
     # 5 — ADR vs Cancellation
     st.subheader("5 — ADR vs Cancellation")
-    fig5 = px.box(df, x='is_canceled', y='adr', color='is_canceled',
+    fig5 = px.box(filtered_df, x='is_canceled', y='adr', color='is_canceled',
                   labels={'is_canceled': 'Canceled', 'adr': 'Average Daily Rate (€)'},
                   color_discrete_map={0: '#2563EB', 1: '#EF4444'})
     fig5.update_layout(showlegend=False)
     st.plotly_chart(fig5, use_container_width=True)
+    st.info("💡 Higher ADR bookings show a slightly higher cancellation tendency, but ADR alone is not a strong predictor.")
 
     st.markdown("---")
 
     # 6 — Special Requests vs Cancellation
     st.subheader("6 — Special Requests vs Cancellation Rate")
-    special = df.groupby('total_of_special_requests')['is_canceled'].mean().reset_index()
+    special = filtered_df.groupby('total_of_special_requests')['is_canceled'].mean().reset_index()
     special['is_canceled'] = (special['is_canceled'] * 100).round(2)
     special.columns = ['Special Requests', 'Cancellation Rate (%)']
     fig6 = px.bar(special, x='Special Requests', y='Cancellation Rate (%)',
@@ -136,12 +228,13 @@ elif page == "📊 Data Insights":
     fig6.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
     fig6.update_layout(yaxis_range=[0, special['Cancellation Rate (%)'].max()+10])
     st.plotly_chart(fig6, use_container_width=True)
+    st.info("💡 Customers with more special requests are less likely to cancel, suggesting that engaged customers are more committed to their bookings.")
 
     st.markdown("---")
 
     # 7 — Repeated Guest vs Cancellation
     st.subheader("7 — Repeated Guest vs Cancellation Rate")
-    repeated = df.groupby('is_repeated_guest')['is_canceled'].mean().reset_index()
+    repeated = filtered_df.groupby('is_repeated_guest')['is_canceled'].mean().reset_index()
     repeated['is_canceled'] = (repeated['is_canceled'] * 100).round(2)
     repeated['is_repeated_guest'] = repeated['is_repeated_guest'].map({0: 'New Guest', 1: 'Repeated Guest'})
     repeated.columns = ['Guest Type', 'Cancellation Rate (%)']
@@ -150,12 +243,13 @@ elif page == "📊 Data Insights":
     fig7.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
     fig7.update_layout(showlegend=False, yaxis_range=[0, repeated['Cancellation Rate (%)'].max()+10])
     st.plotly_chart(fig7, use_container_width=True)
+    st.info("💡 Returning guests rarely cancel compared to new customers. Loyalty programs can help reduce cancellations.")
 
     st.markdown("---")
 
     # 8 — Previous Cancellations vs Cancellation Rate
     st.subheader("8 — Previous Cancellations vs Cancellation Rate")
-    prev = df.groupby('previous_cancellations')['is_canceled'].mean().reset_index()
+    prev = filtered_df.groupby('previous_cancellations')['is_canceled'].mean().reset_index()
     prev['is_canceled'] = (prev['is_canceled'] * 100).round(2)
     prev.columns = ['Previous Cancellations', 'Cancellation Rate (%)']
     prev = prev[prev['Previous Cancellations'] <= 10]
@@ -164,6 +258,7 @@ elif page == "📊 Data Insights":
     fig8.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
     fig8.update_layout(yaxis_range=[0, prev['Cancellation Rate (%)'].max()+10])
     st.plotly_chart(fig8, use_container_width=True)
+    st.info("💡 A history of previous cancellations is a strong indicator of future cancellation risk.")
     st.markdown("""
     > **Distribution of previous_cancellations:**
     > - 0 previous cancellations: **98.09%** of customers
@@ -176,7 +271,7 @@ elif page == "📊 Data Insights":
 
     # 9 — Room Changed vs Cancellation
     st.subheader("9 — Room Changed vs Cancellation Rate")
-    room = df.groupby('room_changed')['is_canceled'].mean().reset_index()
+    room = filtered_df.groupby('room_changed')['is_canceled'].mean().reset_index()
     room['is_canceled'] = (room['is_canceled'] * 100).round(2)
     room['room_changed'] = room['room_changed'].map({0: 'Same Room', 1: 'Room Changed'})
     room.columns = ['Room Status', 'Cancellation Rate (%)']
@@ -185,12 +280,13 @@ elif page == "📊 Data Insights":
     fig9.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
     fig9.update_layout(showlegend=False, yaxis_range=[0, room['Cancellation Rate (%)'].max()+10])
     st.plotly_chart(fig9, use_container_width=True)
+    st.info("💡 Room changes are associated with much lower cancellation rates. However, this feature becomes available after booking and should be interpreted carefully in real-world prediction systems.")
 
     st.markdown("---")
 
     # 10 — Top 10 Countries by Cancellation Rate
     st.subheader("10 — Top 10 Countries by Cancellation Rate")
-    country_cancel = df.groupby('country').agg(
+    country_cancel = filtered_df.groupby('country').agg(
         total=('is_canceled', 'count'),
         canceled=('is_canceled', 'sum')
     ).reset_index()
@@ -203,64 +299,57 @@ elif page == "📊 Data Insights":
     fig10.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
     fig10.update_layout(yaxis={'categoryorder': 'total ascending'})
     st.plotly_chart(fig10, use_container_width=True)
+    st.info("💡 Cancellation rates vary by country. Hotels can use targeted communication for customers from higher-risk regions.")
 
     st.markdown("---")
 
     # 11 — Top 10 Agents by Cancellation Rate
     st.subheader("11 — Top 10 Agents by Cancellation Rate")
-    agent_cancel = df.groupby('agent').agg(
+    agent_cancel = filtered_df.groupby('agent').agg(
         total=('is_canceled', 'count'),
         canceled=('is_canceled', 'sum')
     ).reset_index()
     agent_cancel = agent_cancel[agent_cancel['total'] >= 50]
     agent_cancel['rate'] = (agent_cancel['canceled'] / agent_cancel['total'] * 100).round(2)
     agent_cancel = agent_cancel.nlargest(10, 'rate')
-    agent_cancel['agent'] = agent_cancel['agent'].astype(str)
+    agent_cancel['agent'] = agent_cancel['agent'].astype(float).astype(int).astype(str)
     fig11 = px.bar(agent_cancel, x='rate', y='agent', orientation='h',
                    text='rate', color='rate', color_continuous_scale='Reds',
                    labels={'rate': 'Cancellation Rate (%)', 'agent': 'Agent ID'})
     fig11.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
     fig11.update_layout(yaxis={'categoryorder': 'total ascending'})
     st.plotly_chart(fig11, use_container_width=True)
-    st.info("💡 Insight: Some agents are associated with significantly higher cancellation rates, which may reflect booking patterns or customer segments they serve.")
+    st.info("💡 Some agents are associated with significantly higher cancellation rates, which may reflect booking patterns or customer segments they serve.")
 
-# ══════════════════════════════════════════════════════════════════════════════
-# PAGE 3 — Analysis Advice
-# ══════════════════════════════════════════════════════════════════════════════
-elif page == "💡 Business Insights & Recommendations":
-    st.title("💡 Business Insights & Recommendations")
-    st.markdown("Based on the data analysis, here are key insights and recommendations:")
     st.markdown("---")
 
-    st.subheader("1 — Lead Time")
-    st.info("📌 Customers with longer lead times are more likely to cancel. Hotels can reduce cancellations by sending reminders or engaging customers before arrival.")
+    # 12 — ADR vs Lead Time Scatter
+    st.subheader("12 — ADR vs Lead Time")
+    sample_df = filtered_df.sample(min(3000, len(filtered_df)), random_state=42)
+    fig12 = px.scatter(sample_df, x='lead_time', y='adr',
+                       color='is_canceled', opacity=0.6,
+                       labels={'lead_time': 'Lead Time (days)', 'adr': 'ADR (€)', 'is_canceled': 'Canceled'},
+                       color_discrete_map={0: '#2563EB', 1: '#EF4444'})
+    st.plotly_chart(fig12, use_container_width=True)
+    st.info("💡 High lead time combined with high ADR increases cancellation risk.")
 
-    st.subheader("2 — Deposit Type")
-    st.info("📌 Deposit type has a strong relationship with cancellations. In this dataset, Non Refund bookings show the highest cancellation rate, making this feature highly informative for prediction.")
+    st.markdown("---")
 
-    st.subheader("3 — Market Segment")
-    st.info("📌 Online TA and Groups have the highest cancellation rates. Hotels may apply stricter booking policies or additional confirmation for these segments.")
-
-    st.subheader("4 — Special Requests")
-    st.info("📌 Customers with more special requests are less likely to cancel, suggesting that engaged customers are more committed to their bookings.")
-
-    st.subheader("5 — Repeated Guests")
-    st.info("📌 Returning guests rarely cancel compared to new customers. Loyalty programs can help reduce cancellations.")
-
-    st.subheader("6 — Previous Cancellations")
-    st.info("📌 A history of previous cancellations is a strong indicator of future cancellation risk.")
-
-    st.subheader("7 — Room Changed")
-    st.info("📌 Room changes are associated with much lower cancellation rates. However, this feature becomes available after booking and should be interpreted carefully in real-world prediction systems.")
-
-    st.subheader("8 — ADR")
-    st.info("📌 Higher ADR bookings show a slightly higher cancellation tendency, but ADR alone is not a strong predictor.")
-
-    st.subheader("9 — Country")
-    st.info("📌 Cancellation rates vary by country. Hotels can use targeted communication for customers from higher-risk regions.")
-
-    st.subheader("10 — General Recommendation")
-    st.success("✅ Focus on early identification of high-risk bookings using Lead Time, Previous Cancellations, Market Segment, Deposit Type, and Guest History to reduce cancellations and improve hotel revenue.")
+    # 13 — Correlation Heatmap
+    st.subheader("13 — Correlation Heatmap")
+    import plotly.figure_factory as ff
+    num_df = filtered_df.select_dtypes(include=np.number)
+    corr = num_df.corr().round(2)
+    fig13 = ff.create_annotated_heatmap(
+        z=corr.values,
+        x=list(corr.columns),
+        y=list(corr.index),
+        colorscale='Blues',
+        showscale=True
+    )
+    fig13.update_layout(height=600)
+    st.plotly_chart(fig13, use_container_width=True)
+    st.info("💡 lead_time and previous_cancellations show the strongest positive correlation with is_canceled.")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE 4 — Prediction
@@ -308,44 +397,114 @@ elif page == "🔮 Prediction":
 
     st.markdown("---")
 
-    if st.button("🔮 Predict", use_container_width=True):
-        template = df.drop(columns='is_canceled').iloc[[0]].copy()
-        template['hotel']                          = hotel
-        template['lead_time']                      = lead_time
-        template['arrival_date_year']              = arrival_date_year
-        template['arrival_date_month']             = arrival_date_month
-        template['arrival_date_week_number']       = arrival_date_week_number
-        template['arrival_date_day_of_month']      = arrival_date_day_of_month
-        template['meal']                           = meal
-        template['country']                        = country
-        template['market_segment']                 = market_segment
-        template['distribution_channel']           = distribution_channel
-        template['is_repeated_guest']              = is_repeated_guest
-        template['previous_cancellations']         = previous_cancellations
-        template['previous_bookings_not_canceled'] = previous_bookings_not_canceled
-        template['booking_changes']                = booking_changes
-        template['deposit_type']                   = deposit_type
-        template['agent']                          = agent
-        template['days_in_waiting_list']           = days_in_waiting_list
-        template['customer_type']                  = customer_type
-        template['adr']                            = adr
-        template['required_car_parking_spaces']    = required_car_parking_spaces
-        template['total_of_special_requests']      = total_of_special_requests
-        template['group_size']                     = group_size
-        template['room_changed']                   = room_changed
-        template['total_bookings']                 = total_bookings
-        template['total_nights']                   = total_nights
-        template['weekend_ratio']                  = weekend_ratio
+    if lead_time == 0:
+        st.warning("⚠️ Lead time is unusually low — please verify.")
+    if group_size <= 0:
+        st.error("❌ Group size must be greater than 0.")
 
-        input_selected = selector.transform(template)
-        prediction     = model.predict(input_selected)[0]
-        probability    = model.predict_proba(input_selected)[0]
+    if st.button("🔮 Predict", use_container_width=True):
+        with st.spinner("Predicting..."):
+            template = df.drop(columns='is_canceled').iloc[[0]].copy()
+            template['hotel']                          = hotel
+            template['lead_time']                      = lead_time
+            template['arrival_date_year']              = arrival_date_year
+            template['arrival_date_month']             = arrival_date_month
+            template['arrival_date_week_number']       = arrival_date_week_number
+            template['arrival_date_day_of_month']      = arrival_date_day_of_month
+            template['meal']                           = meal
+            template['country']                        = country
+            template['market_segment']                 = market_segment
+            template['distribution_channel']           = distribution_channel
+            template['is_repeated_guest']              = is_repeated_guest
+            template['previous_cancellations']         = previous_cancellations
+            template['previous_bookings_not_canceled'] = previous_bookings_not_canceled
+            template['booking_changes']                = booking_changes
+            template['deposit_type']                   = deposit_type
+            template['agent']                          = agent
+            template['days_in_waiting_list']           = days_in_waiting_list
+            template['customer_type']                  = customer_type
+            template['adr']                            = adr
+            template['required_car_parking_spaces']    = required_car_parking_spaces
+            template['total_of_special_requests']      = total_of_special_requests
+            template['group_size']                     = group_size
+            template['room_changed']                   = room_changed
+            template['total_bookings']                 = total_bookings
+            template['total_nights']                   = total_nights
+            template['weekend_ratio']                  = weekend_ratio
+
+            input_selected = selector.transform(template)
+            prediction     = model.predict(input_selected)[0]
+            probability    = model.predict_proba(input_selected)[0]
 
         st.markdown("---")
         if prediction == 1:
-            st.error(f"❌ This booking is likely to be **CANCELED** (Confidence: {probability[1]*100:.1f}%)")
+            prob = probability[1]*100
+            st.markdown(f"""
+            <div class="result-box" style="padding:30px; border-radius:15px; background-color:#2d1515;
+                        border: 2px solid #ef4444; box-shadow: 0 0 20px #ef4444; text-align:center;">
+                <h2 style="color:#ef4444; font-size:2rem;">❌ Booking Will Be CANCELED</h2>
+                <p style="font-size:22px; color:#f87171;">
+                    Cancellation Probability: <b>{prob:.1f}%</b>
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+            if prob > 80:
+                st.warning("⚠️ High risk booking — consider requiring a deposit or sending an early confirmation!")
         else:
-            st.success(f"✅ This booking is likely to **NOT be canceled** (Confidence: {probability[0]*100:.1f}%)")
+            prob = probability[0]*100
+            st.markdown(f"""
+            <div class="result-box" style="padding:30px; border-radius:15px; background-color:#152d1e;
+                        border: 2px solid #22c55e; box-shadow: 0 0 20px #22c55e; text-align:center;">
+                <h2 style="color:#22c55e; font-size:2rem;">✅ Booking Will NOT Be Canceled</h2>
+                <p style="font-size:22px; color:#4ade80;">
+                    Confidence: <b>{prob:.1f}%</b>
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("---")
+        st.subheader("📌 Most Similar Booking in Dataset")
+
+        mask = (
+            (df['deposit_type'] == deposit_type) &
+            (df['market_segment'] == market_segment) &
+            (df['hotel'] == hotel)
+        )
+        filtered_similar = df[mask]
+
+        if len(filtered_similar) > 0:
+            closest_idx = (filtered_similar['lead_time'] - lead_time).abs().idxmin()
+            most_relevant = df.loc[closest_idx]
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("**Your Input**")
+                input_display = pd.DataFrame([{
+                    'hotel': hotel,
+                    'lead_time': lead_time,
+                    'market_segment': market_segment,
+                    'deposit_type': deposit_type,
+                    'adr': adr,
+                    'total_of_special_requests': total_of_special_requests,
+                    'previous_cancellations': previous_cancellations,
+                    'customer_type': customer_type
+                }])
+                st.dataframe(input_display, use_container_width=True)
+
+            with col2:
+                st.markdown("**Most Similar Booking**")
+                relevant_display = most_relevant[[
+                    'hotel','lead_time','market_segment','deposit_type',
+                    'adr','total_of_special_requests','previous_cancellations','customer_type'
+                ]].to_frame().T
+                st.dataframe(relevant_display, use_container_width=True)
+
+            if most_relevant['is_canceled'] == 1:
+                st.warning("⚠️ Similar bookings in the dataset were canceled.")
+            else:
+                st.success("✅ Similar bookings in the dataset were NOT canceled.")
+        else:
+            st.info("No similar bookings found in the dataset.")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE 5 — Model Performance
@@ -395,17 +554,29 @@ else:
 
     # Feature Importance
     st.subheader("Top Feature Importance")
+    xgb_model = model.named_steps['xgboost']
+    importances = xgb_model.feature_importances_
     feature_names = [
         'lead_time', 'agent', 'required_car_parking_spaces',
         'total_of_special_requests', 'room_changed',
         'market_segment_Online TA', 'deposit_type_Non Refund',
         'country (bit 5)', 'country (bit 7)'
     ]
-    xgb_model = model.named_steps['xgboost']
-    importances = xgb_model.feature_importances_
-    feat_df = pd.DataFrame({'Feature': feature_names, 'Importance': importances})
+    feat_df = pd.DataFrame({
+        'Feature': feature_names[:len(importances)],
+        'Importance': importances[:len(feature_names)]
+    })
     feat_df = feat_df.sort_values('Importance')
     fig_feat = px.bar(feat_df, x='Importance', y='Feature', orientation='h',
                       color='Importance', color_continuous_scale='Blues', text='Importance')
     fig_feat.update_traces(texttemplate='%{text:.3f}', textposition='outside')
     st.plotly_chart(fig_feat, use_container_width=True)
+
+# ── Footer ───────────────────────────────────────────────────────────────────
+st.markdown("""
+<hr>
+<div style="text-align:center; color:gray; padding:10px;">
+    🏨 Hotel Booking Cancellation Prediction<br>
+    Developed by <b style="color:#00c3ff;">Mohamed Waleed</b>
+</div>
+""", unsafe_allow_html=True)

@@ -147,10 +147,10 @@ if page == "📊 Data Insights":
     cancel_rate.columns = ['Status', 'Rate']
     cancel_rate['Status'] = cancel_rate['Status'].map({0: 'Not Canceled', 1: 'Canceled'})
     cancel_rate['Rate'] = (cancel_rate['Rate'] * 100).round(2)
-    fig1 = px.bar(cancel_rate, x='Status', y='Rate', color='Status', text='Rate',
-                  color_discrete_sequence=['#2563EB', '#EF4444'])
-    fig1.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-    fig1.update_layout(showlegend=False, yaxis_range=[0, 100])
+    fig1 = px.pie(cancel_rate, names='Status', values='Rate', hole=0.6,
+                  color='Status', color_discrete_sequence=['#2563EB', '#EF4444'],
+                  title="Cancellation Distribution")
+    fig1.update_traces(textinfo='percent+label')
     st.plotly_chart(fig1, use_container_width=True)
     st.info("💡 About 37% of bookings are canceled, indicating a significant class imbalance.")
 
@@ -167,10 +167,11 @@ if page == "📊 Data Insights":
         fig2a.update_layout(showlegend=False)
         st.plotly_chart(fig2a, use_container_width=True)
     with col2:
-        fig2b = px.box(filtered_df, x='is_canceled', y='adr', color='is_canceled',
-                       labels={'is_canceled': 'Canceled', 'adr': 'ADR (€)'},
-                       color_discrete_map={0: '#2563EB', 1: '#EF4444'},
-                       title="ADR vs Cancellation")
+        fig2b = px.violin(filtered_df, x='is_canceled', y='adr', color='is_canceled',
+                          box=True, points="outliers",
+                          labels={'is_canceled': 'Canceled', 'adr': 'ADR (€)'},
+                          color_discrete_map={0: '#2563EB', 1: '#EF4444'},
+                          title="ADR Distribution by Cancellation")
         fig2b.update_layout(showlegend=False)
         st.plotly_chart(fig2b, use_container_width=True)
     st.info("💡 Customers with longer lead times are more likely to cancel. Higher ADR bookings show a slightly higher cancellation tendency.")
@@ -194,10 +195,11 @@ if page == "📊 Data Insights":
         seg['is_canceled'] = (seg['is_canceled'] * 100).round(2)
         seg.columns = ['Market Segment', 'Cancellation Rate (%)']
         seg = seg.sort_values('Cancellation Rate (%)', ascending=False)
-        fig3b = px.bar(seg, x='Market Segment', y='Cancellation Rate (%)', color='Market Segment',
-                       text='Cancellation Rate (%)', title="Market Segment")
+        fig3b = px.bar(seg, y='Market Segment', x='Cancellation Rate (%)', orientation='h',
+                       text='Cancellation Rate (%)', color='Cancellation Rate (%)',
+                       color_continuous_scale='Reds', title="Market Segment")
         fig3b.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-        fig3b.update_layout(showlegend=False, yaxis_range=[0, seg['Cancellation Rate (%)'].max()+10])
+        fig3b.update_layout(yaxis={'categoryorder': 'total ascending'})
         st.plotly_chart(fig3b, use_container_width=True)
     st.info("💡 Non Refund deposits and Online TA / Groups segments are strongly associated with cancellations.")
 
@@ -210,11 +212,9 @@ if page == "📊 Data Insights":
         special = filtered_df.groupby('total_of_special_requests')['is_canceled'].mean().reset_index()
         special['is_canceled'] = (special['is_canceled'] * 100).round(2)
         special.columns = ['Special Requests', 'Cancellation Rate (%)']
-        fig4a = px.bar(special, x='Special Requests', y='Cancellation Rate (%)',
-                       text='Cancellation Rate (%)', title="Special Requests",
-                       color_discrete_sequence=['#2563EB'])
-        fig4a.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-        fig4a.update_layout(yaxis_range=[0, special['Cancellation Rate (%)'].max()+10])
+        fig4a = px.line(special, x='Special Requests', y='Cancellation Rate (%)',
+                        markers=True, title="Special Requests",
+                        color_discrete_sequence=['#2563EB'])
         st.plotly_chart(fig4a, use_container_width=True)
     with col2:
         repeated = filtered_df.groupby('is_repeated_guest')['is_canceled'].mean().reset_index()
@@ -302,12 +302,12 @@ if page == "📊 Data Insights":
 
     st.markdown("---")
 
-    # 7 — Scatter ADR vs Lead Time
-    st.subheader("7 — ADR vs Lead Time")
-    sample_df = filtered_df.sample(min(3000, len(filtered_df)), random_state=42)
-    fig7 = px.scatter(sample_df, x='lead_time', y='adr', color='is_canceled', opacity=0.6,
-                      labels={'lead_time': 'Lead Time (days)', 'adr': 'ADR (€)', 'is_canceled': 'Canceled'},
-                      color_discrete_map={0: '#2563EB', 1: '#EF4444'})
+    # 7 — Density Heatmap ADR vs Lead Time
+    st.subheader("7 — ADR vs Lead Time (Cancellation Probability)")
+    fig7 = px.density_heatmap(filtered_df, x='lead_time', y='adr', z='is_canceled',
+                              histfunc='avg', color_continuous_scale='RdBu_r',
+                              labels={'is_canceled': 'Cancellation Probability',
+                                      'lead_time': 'Lead Time (days)', 'adr': 'ADR (€)'})
     st.plotly_chart(fig7, use_container_width=True)
     st.info("💡 High lead time combined with high ADR increases cancellation risk.")
 
@@ -325,7 +325,7 @@ if page == "📊 Data Insights":
         colorscale='Blues',
         showscale=True
     )
-    fig8.update_layout(height=600)
+    fig8.update_layout(height=600, xaxis_side="bottom", margin=dict(l=50, r=50, t=50, b=50))
     st.plotly_chart(fig8, use_container_width=True)
     st.info("💡 lead_time and previous_cancellations show the strongest positive correlation with is_canceled.")
 
@@ -333,34 +333,54 @@ if page == "📊 Data Insights":
 elif page == "🔮 Prediction":
     st.title("🔮 Will This Booking Be Canceled?")
     st.dataframe(df.head())
-    st.markdown("Fill in the booking details below and click **Predict**.")
     st.markdown("---")
 
-    col1, col2, col3 = st.columns(3)
+    use_custom = st.toggle("⚙️ Use Custom Inputs", value=False)
 
-    with col1:
-        hotel                  = st.selectbox("Hotel Type", df['hotel'].unique())
-        lead_time              = st.number_input("Lead Time (days)", 0, 700, 30)
-        arrival_date_year      = st.selectbox("Arrival Year", sorted(df['arrival_date_year'].unique()))
-        arrival_date_month     = st.slider("Arrival Month", 1, 12, 6)
-        meal                   = st.selectbox("Meal Type", df['meal'].unique())
-        group_size             = st.number_input("Group Size", 1, 20, 2)
-
-    with col2:
-        country                        = st.selectbox("Country", sorted(df['country'].dropna().unique()))
-        market_segment                 = st.selectbox("Market Segment", df['market_segment'].unique())
-        distribution_channel           = st.selectbox("Distribution Channel", df['distribution_channel'].unique())
-        is_repeated_guest              = st.selectbox("Repeated Guest?", [0, 1])
-        previous_cancellations         = st.number_input("Previous Cancellations", 0, 50, 0)
-        total_nights                   = st.number_input("Total Nights", 1, 70, 3)
-
-    with col3:
-        deposit_type                = st.selectbox("Deposit Type", df['deposit_type'].unique())
-        customer_type               = st.selectbox("Customer Type", df['customer_type'].unique())
-        agent                       = st.number_input("Agent ID", 0, 600, 0)
-        adr                         = st.number_input("ADR (€)", 0.0, 5000.0, 100.0)
-        required_car_parking_spaces = st.number_input("Parking Spaces", 0, 8, 0)
-        total_of_special_requests   = st.number_input("Special Requests", 0, 5, 0)
+    if use_custom:
+        st.success("⚙️ Custom input mode enabled — fill in your booking details below.")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            hotel                  = st.selectbox("Hotel Type", df['hotel'].unique())
+            lead_time              = st.number_input("Lead Time (days)", 0, 700, 30)
+            arrival_date_year      = st.selectbox("Arrival Year", sorted(df['arrival_date_year'].unique()))
+            arrival_date_month     = st.slider("Arrival Month", 1, 12, 6)
+            meal                   = st.selectbox("Meal Type", df['meal'].unique())
+            group_size             = st.number_input("Group Size", 1, 20, 2)
+        with col2:
+            country                        = st.selectbox("Country", sorted(df['country'].dropna().unique()))
+            market_segment                 = st.selectbox("Market Segment", df['market_segment'].unique())
+            distribution_channel           = st.selectbox("Distribution Channel", df['distribution_channel'].unique())
+            is_repeated_guest              = st.selectbox("Repeated Guest?", [0, 1])
+            previous_cancellations         = st.number_input("Previous Cancellations", 0, 50, 0)
+            total_nights                   = st.number_input("Total Nights", 1, 70, 3)
+        with col3:
+            deposit_type                = st.selectbox("Deposit Type", df['deposit_type'].unique())
+            customer_type               = st.selectbox("Customer Type", df['customer_type'].unique())
+            agent                       = st.number_input("Agent ID", 0, 600, 0)
+            adr                         = st.number_input("ADR (€)", 0.0, 5000.0, 100.0)
+            required_car_parking_spaces = st.number_input("Parking Spaces", 0, 8, 0)
+            total_of_special_requests   = st.number_input("Special Requests", 0, 5, 0)
+    else:
+        hotel                       = "City Hotel"
+        lead_time                   = 30
+        arrival_date_year           = 2016
+        arrival_date_month          = 6
+        meal                        = "BB"
+        group_size                  = 2
+        country                     = "PRT"
+        market_segment              = "Online TA"
+        distribution_channel        = "TA/TO"
+        is_repeated_guest           = 0
+        previous_cancellations      = 0
+        total_nights                = 3
+        deposit_type                = "No Deposit"
+        customer_type               = "Transient"
+        agent                       = 0
+        adr                         = 100.0
+        required_car_parking_spaces = 0
+        total_of_special_requests   = 0
+        st.info("✅ Using default booking scenario. Enable custom inputs to modify.")
     room_changed   = 0
     total_bookings = previous_cancellations
     previous_bookings_not_canceled = 0

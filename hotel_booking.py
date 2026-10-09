@@ -315,17 +315,15 @@ if page == "📊 Data Insights":
 
     # 8 — Correlation Heatmap
     st.subheader("8 — Correlation Heatmap")
-    import plotly.figure_factory as ff
     num_df = filtered_df.select_dtypes(include=np.number)
     corr = num_df.corr().round(2)
-    fig8 = ff.create_annotated_heatmap(
-        z=corr.values,
-        x=list(corr.columns),
-        y=list(corr.index),
-        colorscale='Blues',
-        showscale=True
+    fig8 = px.imshow(
+        corr,
+        text_auto=True,
+        color_continuous_scale='Blues',
+        aspect='auto'
     )
-    fig8.update_layout(height=600, xaxis_side="bottom", margin=dict(l=50, r=50, t=50, b=50))
+    fig8.update_layout(height=600, margin=dict(l=50, r=50, t=50, b=50))
     st.plotly_chart(fig8, use_container_width=True)
     st.info("💡 lead_time and previous_cancellations show the strongest positive correlation with is_canceled.")
 
